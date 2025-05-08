@@ -150,65 +150,90 @@ function updatePrices() {
                 
                 const card = document.createElement('div');
                 card.className = 'crypto-card';
+                card.setAttribute('data-symbol', crypto.symbol);
+                
+                // 添加點擊事件
+                card.addEventListener('click', () => {
+                    window.location.href = `crypto-detail.html?symbol=${crypto.symbol}`;
+                });
                 
                 const iconClass = cryptoIcons[crypto.symbol] || 'fas fa-coins';
-                const name = cryptoNames[crypto.symbol] || crypto.symbol;
+                const name = cryptoNames[crypto.symbol] || crypto.name || crypto.symbol;
+                
+                // 格式化價格顯示
+                const formattedPrice = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 8
+                }).format(crypto.price);
+                
+                // 格式化交易量
+                const formattedVolume = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    notation: 'compact',
+                    maximumFractionDigits: 2
+                }).format(crypto.volume_24h);
+                
+                // 格式化高低價
+                const formattedHigh = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 8
+                }).format(crypto.high_24h);
+                
+                const formattedLow = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 8
+                }).format(crypto.low_24h);
                 
                 card.innerHTML = `
-                    <div class="crypto-icon">
-                        <i class="${iconClass}"></i>
+                    <div class="crypto-header">
+                        <div class="crypto-icon">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <div class="crypto-info">
+                            <div class="crypto-name">${name}</div>
+                            <div class="crypto-symbol">${crypto.symbol}</div>
+                        </div>
                     </div>
-                    <h2>${name} (${crypto.symbol})</h2>
-                    <p class="price">$${crypto.price.toLocaleString()}</p>
-                    <p class="change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
-                        <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i> 
-                        ${Math.abs(crypto.change_24h).toFixed(2)}%
-                    </p>
-                    <p class="volume">24h Volume: $${crypto.volume_24h.toLocaleString()}</p>
-                    <p class="high-low">
-                        High: $${crypto.high_24h.toLocaleString()} | 
-                        Low: $${crypto.low_24h.toLocaleString()}
-                    </p>
-                    <div class="crypto-chart">
-                        <canvas id="${crypto.symbol.toLowerCase()}Chart"></canvas>
+                    <div class="crypto-price">
+                        <div class="price">${formattedPrice}</div>
+                        <div class="price-change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
+                            <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i>
+                            ${Math.abs(crypto.change_24h).toFixed(2)}%
+                        </div>
+                    </div>
+                    <div class="crypto-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">24h Volume</span>
+                            <span class="stat-value">${formattedVolume}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">24h High</span>
+                            <span class="stat-value">${formattedHigh}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">24h Low</span>
+                            <span class="stat-value">${formattedLow}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Market Cap</span>
+                            <span class="stat-value">${formatMarketCap(crypto.market_cap)}</span>
+                        </div>
                     </div>
                 `;
                 
                 cryptoGrid.appendChild(card);
-                
-                // Initialize chart
-                const ctx = card.querySelector('canvas').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: ['1月', '2月', '3月', '4月', '5月', '6月'],
-                        datasets: [{
-                            data: Array(6).fill().map(() => crypto.price * (1 + (Math.random() - 0.5) * 0.1)),
-                            borderColor: crypto.change_24h >= 0 ? '#2ecc71' : '#e74c3c',
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
-                        },
-                        scales: {
-                            x: { display: false },
-                            y: { display: false }
-                        }
-                    }
-                });
             });
             
             // Update market stats
-            document.getElementById('totalMarketCap').textContent = 
-                `$${(totalMarketCap / 1e12).toFixed(2)}T`;
-            document.getElementById('totalVolume').textContent = 
-                `$${(totalVolume / 1e9).toFixed(2)}B`;
+            document.getElementById('totalMarketCap').textContent = formatMarketCap(totalMarketCap);
+            document.getElementById('totalVolume').textContent = formatVolume(totalVolume);
             document.getElementById('btcDominance').textContent = 
                 `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
             
@@ -219,10 +244,118 @@ function updatePrices() {
         .catch(error => console.error('Error updating prices:', error));
 }
 
+// Helper function to format market cap
+function formatMarketCap(value) {
+    if (value >= 1e12) {
+        return `$${(value / 1e12).toFixed(2)}T`;
+    } else if (value >= 1e9) {
+        return `$${(value / 1e9).toFixed(2)}B`;
+    } else if (value >= 1e6) {
+        return `$${(value / 1e6).toFixed(2)}M`;
+    } else if (value >= 1e3) {
+        return `$${(value / 1e3).toFixed(2)}K`;
+    }
+    return `$${value.toFixed(2)}`;
+}
+
+// Helper function to format volume
+function formatVolume(value) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        notation: 'compact',
+        maximumFractionDigits: 2
+    }).format(value);
+}
+
+// 添加詳細頁面的加載函數
+function loadCryptoDetail() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const symbol = urlParams.get('symbol');
+    
+    if (!symbol) {
+        window.location.href = 'index.html';
+        return;
+    }
+    
+    fetch('prices.json')
+        .then(response => response.json())
+        .then(prices => {
+            const crypto = prices.find(c => c.symbol === symbol);
+            if (!crypto) {
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // 更新頁面標題
+            document.title = `${cryptoNames[crypto.symbol] || crypto.name} (${crypto.symbol}) - 加密貨幣詳情`;
+            
+            // 更新詳細資訊
+            const detailContainer = document.querySelector('.crypto-detail-container');
+            detailContainer.innerHTML = `
+                <div class="crypto-detail-header">
+                    <div class="crypto-info">
+                        <i class="${cryptoIcons[crypto.symbol] || 'fas fa-coins'} crypto-icon"></i>
+                        <h1>${cryptoNames[crypto.symbol] || crypto.name}</h1>
+                        <span class="crypto-symbol">${crypto.symbol}</span>
+                    </div>
+                    <div class="crypto-price-info">
+                        <div class="current-price">
+                            <span class="price">${new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 8
+                            }).format(crypto.price)}</span>
+                            <span class="price-change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
+                                <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i>
+                                ${Math.abs(crypto.change_24h).toFixed(2)}%
+                            </span>
+                        </div>
+                        <div class="price-stats">
+                            <div class="stat">
+                                <span class="label">24h 高點</span>
+                                <span class="value">${new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 8
+                                }).format(crypto.high_24h)}</span>
+                            </div>
+                            <div class="stat">
+                                <span class="label">24h 低點</span>
+                                <span class="value">${new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 8
+                                }).format(crypto.low_24h)}</span>
+                            </div>
+                            <div class="stat">
+                                <span class="label">24h 交易量</span>
+                                <span class="value">${formatVolume(crypto.volume_24h)}</span>
+                            </div>
+                            <div class="stat">
+                                <span class="label">市值</span>
+                                <span class="value">${formatMarketCap(crypto.market_cap)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => console.error('Error loading crypto detail:', error));
+}
+
 // Initialize everything when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    updatePrices();
-    setInterval(updatePrices, 60000); // Update prices every minute
+    // 檢查是否在詳細頁面
+    if (window.location.pathname.includes('crypto-detail.html')) {
+        loadCryptoDetail();
+    } else {
+        updatePrices();
+        setInterval(updatePrices, 60000); // Update prices every minute
+    }
 });
 
 // 導航欄活動狀態
