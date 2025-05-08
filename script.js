@@ -130,22 +130,31 @@ function searchCrypto() {
 }
 
 // Function to update cryptocurrency prices
-function updatePrices() {
-    fetch('prices.json')
-        .then(response => response.json())
-        .then(prices => {
-            const cryptoGrid = document.getElementById('cryptoGrid');
-            cryptoGrid.innerHTML = '';
-            
-            let totalMarketCap = 0;
-            let totalVolume = 0;
-            let btcMarketCap = 0;
-            
-            prices.forEach(crypto => {
-                totalMarketCap += crypto.market_cap;
-                totalVolume += crypto.volume_24h;
+async function updatePrices() {
+    try {
+        const response = await fetch('prices.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const prices = await response.json();
+        if (!Array.isArray(prices) || prices.length === 0) {
+            throw new Error('Invalid or empty price data');
+        }
+        
+        const cryptoGrid = document.getElementById('cryptoGrid');
+        cryptoGrid.innerHTML = '';
+        
+        let totalMarketCap = 0;
+        let totalVolume = 0;
+        let btcMarketCap = 0;
+        
+        prices.forEach(crypto => {
+            try {
+                totalMarketCap += crypto.market_cap || 0;
+                totalVolume += crypto.volume_24h || 0;
                 if (crypto.symbol === 'BTC') {
-                    btcMarketCap = crypto.market_cap;
+                    btcMarketCap = crypto.market_cap || 0;
                 }
                 
                 const card = document.createElement('div');
@@ -166,7 +175,7 @@ function updatePrices() {
                     currency: 'USD',
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 8
-                }).format(crypto.price);
+                }).format(crypto.price || 0);
                 
                 // 格式化交易量
                 const formattedVolume = new Intl.NumberFormat('en-US', {
@@ -174,7 +183,7 @@ function updatePrices() {
                     currency: 'USD',
                     notation: 'compact',
                     maximumFractionDigits: 2
-                }).format(crypto.volume_24h);
+                }).format(crypto.volume_24h || 0);
                 
                 // 格式化高低價
                 const formattedHigh = new Intl.NumberFormat('en-US', {
@@ -182,14 +191,14 @@ function updatePrices() {
                     currency: 'USD',
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 8
-                }).format(crypto.high_24h);
+                }).format(crypto.high_24h || 0);
                 
                 const formattedLow = new Intl.NumberFormat('en-US', {
                     style: 'currency',
                     currency: 'USD',
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 8
-                }).format(crypto.low_24h);
+                }).format(crypto.low_24h || 0);
                 
                 card.innerHTML = `
                     <div class="crypto-header">
@@ -203,9 +212,9 @@ function updatePrices() {
                     </div>
                     <div class="crypto-price">
                         <div class="price">${formattedPrice}</div>
-                        <div class="price-change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
-                            <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i>
-                            ${Math.abs(crypto.change_24h).toFixed(2)}%
+                        <div class="price-change ${(crypto.change_24h || 0) >= 0 ? 'positive' : 'negative'}">
+                            <i class="fas fa-arrow-${(crypto.change_24h || 0) >= 0 ? 'up' : 'down'}"></i>
+                            ${Math.abs(crypto.change_24h || 0).toFixed(2)}%
                         </div>
                     </div>
                     <div class="crypto-stats">
@@ -223,25 +232,40 @@ function updatePrices() {
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Market Cap</span>
-                            <span class="stat-value">${formatMarketCap(crypto.market_cap)}</span>
+                            <span class="stat-value">${formatMarketCap(crypto.market_cap || 0)}</span>
                         </div>
                     </div>
                 `;
                 
                 cryptoGrid.appendChild(card);
-            });
+            } catch (error) {
+                console.error(`Error processing crypto ${crypto.symbol}:`, error);
+                continue;
+            }
+        });
+        
+        // Update market stats
+        document.getElementById('totalMarketCap').textContent = formatMarketCap(totalMarketCap);
+        document.getElementById('totalVolume').textContent = formatVolume(totalVolume);
+        document.getElementById('btcDominance').textContent = 
+            `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
+        
+        // Update timestamp
+        document.querySelector('.last-updated').textContent = 
+            `Last Updated: ${new Date().toLocaleString()}`;
             
-            // Update market stats
-            document.getElementById('totalMarketCap').textContent = formatMarketCap(totalMarketCap);
-            document.getElementById('totalVolume').textContent = formatVolume(totalVolume);
-            document.getElementById('btcDominance').textContent = 
-                `${((btcMarketCap / totalMarketCap) * 100).toFixed(1)}%`;
-            
-            // Update timestamp
-            document.querySelector('.last-updated').textContent = 
-                `Last Updated: ${new Date().toLocaleString()}`;
-        })
-        .catch(error => console.error('Error updating prices:', error));
+    } catch (error) {
+        console.error('Error updating prices:', error);
+        // 顯示錯誤訊息給用戶
+        const cryptoGrid = document.getElementById('cryptoGrid');
+        cryptoGrid.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>無法載入加密貨幣數據，請稍後再試</p>
+                <button onclick="updatePrices()">重試</button>
+            </div>
+        `;
+    }
 }
 
 // Helper function to format market cap
@@ -269,82 +293,99 @@ function formatVolume(value) {
 }
 
 // 添加詳細頁面的加載函數
-function loadCryptoDetail() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const symbol = urlParams.get('symbol');
-    
-    if (!symbol) {
-        window.location.href = 'index.html';
-        return;
-    }
-    
-    fetch('prices.json')
-        .then(response => response.json())
-        .then(prices => {
-            const crypto = prices.find(c => c.symbol === symbol);
-            if (!crypto) {
-                window.location.href = 'index.html';
-                return;
-            }
-            
-            // 更新頁面標題
-            document.title = `${cryptoNames[crypto.symbol] || crypto.name} (${crypto.symbol}) - 加密貨幣詳情`;
-            
-            // 更新詳細資訊
-            const detailContainer = document.querySelector('.crypto-detail-container');
-            detailContainer.innerHTML = `
-                <div class="crypto-detail-header">
-                    <div class="crypto-info">
-                        <i class="${cryptoIcons[crypto.symbol] || 'fas fa-coins'} crypto-icon"></i>
-                        <h1>${cryptoNames[crypto.symbol] || crypto.name}</h1>
-                        <span class="crypto-symbol">${crypto.symbol}</span>
+async function loadCryptoDetail() {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const symbol = urlParams.get('symbol');
+        
+        if (!symbol) {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        const response = await fetch('prices.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const prices = await response.json();
+        if (!Array.isArray(prices) || prices.length === 0) {
+            throw new Error('Invalid or empty price data');
+        }
+        
+        const crypto = prices.find(c => c.symbol === symbol);
+        if (!crypto) {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        // 更新頁面標題
+        document.title = `${cryptoNames[crypto.symbol] || crypto.name} (${crypto.symbol}) - 加密貨幣詳情`;
+        
+        // 更新詳細資訊
+        const detailContainer = document.querySelector('.crypto-detail-container');
+        detailContainer.innerHTML = `
+            <div class="crypto-detail-header">
+                <div class="crypto-info">
+                    <i class="${cryptoIcons[crypto.symbol] || 'fas fa-coins'} crypto-icon"></i>
+                    <h1>${cryptoNames[crypto.symbol] || crypto.name}</h1>
+                    <span class="crypto-symbol">${crypto.symbol}</span>
+                </div>
+                <div class="crypto-price-info">
+                    <div class="current-price">
+                        <span class="price">${new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 8
+                        }).format(crypto.price || 0)}</span>
+                        <span class="price-change ${(crypto.change_24h || 0) >= 0 ? 'positive' : 'negative'}">
+                            <i class="fas fa-arrow-${(crypto.change_24h || 0) >= 0 ? 'up' : 'down'}"></i>
+                            ${Math.abs(crypto.change_24h || 0).toFixed(2)}%
+                        </span>
                     </div>
-                    <div class="crypto-price-info">
-                        <div class="current-price">
-                            <span class="price">${new Intl.NumberFormat('en-US', {
+                    <div class="price-stats">
+                        <div class="stat">
+                            <span class="label">24h 高點</span>
+                            <span class="value">${new Intl.NumberFormat('en-US', {
                                 style: 'currency',
                                 currency: 'USD',
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 8
-                            }).format(crypto.price)}</span>
-                            <span class="price-change ${crypto.change_24h >= 0 ? 'positive' : 'negative'}">
-                                <i class="fas fa-arrow-${crypto.change_24h >= 0 ? 'up' : 'down'}"></i>
-                                ${Math.abs(crypto.change_24h).toFixed(2)}%
-                            </span>
+                            }).format(crypto.high_24h || 0)}</span>
                         </div>
-                        <div class="price-stats">
-                            <div class="stat">
-                                <span class="label">24h 高點</span>
-                                <span class="value">${new Intl.NumberFormat('en-US', {
-                                    style: 'currency',
-                                    currency: 'USD',
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 8
-                                }).format(crypto.high_24h)}</span>
-                            </div>
-                            <div class="stat">
-                                <span class="label">24h 低點</span>
-                                <span class="value">${new Intl.NumberFormat('en-US', {
-                                    style: 'currency',
-                                    currency: 'USD',
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 8
-                                }).format(crypto.low_24h)}</span>
-                            </div>
-                            <div class="stat">
-                                <span class="label">24h 交易量</span>
-                                <span class="value">${formatVolume(crypto.volume_24h)}</span>
-                            </div>
-                            <div class="stat">
-                                <span class="label">市值</span>
-                                <span class="value">${formatMarketCap(crypto.market_cap)}</span>
-                            </div>
+                        <div class="stat">
+                            <span class="label">24h 低點</span>
+                            <span class="value">${new Intl.NumberFormat('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 8
+                            }).format(crypto.low_24h || 0)}</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">24h 交易量</span>
+                            <span class="value">${formatVolume(crypto.volume_24h || 0)}</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">市值</span>
+                            <span class="value">${formatMarketCap(crypto.market_cap || 0)}</span>
                         </div>
                     </div>
                 </div>
-            `;
-        })
-        .catch(error => console.error('Error loading crypto detail:', error));
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading crypto detail:', error);
+        const detailContainer = document.querySelector('.crypto-detail-container');
+        detailContainer.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>無法載入加密貨幣詳細資料，請稍後再試</p>
+                <button onclick="loadCryptoDetail()">重試</button>
+            </div>
+        `;
+    }
 }
 
 // Initialize everything when page loads
