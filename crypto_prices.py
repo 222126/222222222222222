@@ -13,108 +13,114 @@ logger = logging.getLogger(__name__)
 
 def get_crypto_prices():
     try:
-        # CryptoCompare API endpoint
-        url = "https://min-api.cryptocompare.com/data/top/mktcapfull"
+        # CoinDesk API endpoints
+        btc_url = "https://api.coindesk.com/v1/bpi/currentprice.json"
+        eth_url = "https://api.coindesk.com/v1/bpi/currentprice/ETH.json"
         
         # API parameters
-        params = {
-            "limit": 50,  # 獲取前50種加密貨幣
-            "tsym": "USD",
-            "api_key": "YOUR_CRYPTOCOMPARE_API_KEY"  # 請替換為您的 API key
+        headers = {
+            "Accept": "application/json"
         }
         
         # 添加重試機制
         max_retries = 3
         retry_delay = 2  # 秒
         
+        market_data = {
+            "totalMarketCap": 0,
+            "totalVolume": 0,
+            "btcDominance": 0,
+            "cryptos": [],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 獲取比特幣價格
         for attempt in range(max_retries):
             try:
-                logger.info(f"Fetching cryptocurrency prices (attempt {attempt + 1}/{max_retries})...")
-                response = requests.get(url, params=params, timeout=10)
+                logger.info(f"Fetching Bitcoin price (attempt {attempt + 1}/{max_retries})...")
+                btc_response = requests.get(btc_url, headers=headers, timeout=10)
                 
-                if response.status_code == 200:
-                    data = response.json()
+                if btc_response.status_code == 200:
+                    btc_data = btc_response.json()
+                    btc_price = float(btc_data["bpi"]["USD"]["rate"].replace(",", ""))
                     
-                    if "Data" not in data:
-                        logger.error("Invalid API response format")
-                        raise ValueError("Invalid API response format")
-                    
-                    logger.info("Successfully received data from CryptoCompare API")
-                    
-                    # 初始化市場數據
-                    market_data = {
-                        "totalMarketCap": 0,
-                        "totalVolume": 0,
-                        "btcDominance": 0,
-                        "cryptos": [],
-                        "timestamp": datetime.now().isoformat()
+                    # 添加比特幣數據
+                    btc_data = {
+                        "symbol": "BTC",
+                        "name": "Bitcoin",
+                        "price": btc_price,
+                        "change_24h": 0,  # CoinDesk API 不提供24小時變化
+                        "volume_24h": 0,  # CoinDesk API 不提供交易量
+                        "high_24h": btc_price,  # 使用當前價格作為高點
+                        "low_24h": btc_price,   # 使用當前價格作為低點
+                        "market_cap": 0  # CoinDesk API 不提供市值
                     }
-                    
-                    # 處理每個加密貨幣的數據
-                    for crypto in data["Data"]:
-                        try:
-                            coin_info = crypto["CoinInfo"]
-                            raw_data = crypto["RAW"]["USD"]
-                            
-                            # 計算總市值和交易量
-                            market_data["totalMarketCap"] += raw_data["MKTCAP"]
-                            market_data["totalVolume"] += raw_data["VOLUME24HOUR"]
-                            
-                            # 如果是比特幣，記錄其市值用於計算主導率
-                            if coin_info["Name"] == "BTC":
-                                btc_market_cap = raw_data["MKTCAP"]
-                            
-                            # 添加加密貨幣數據
-                            crypto_data = {
-                                "symbol": coin_info["Name"],
-                                "name": coin_info["FullName"],
-                                "price": raw_data["PRICE"],
-                                "change_24h": raw_data["CHANGEPCT24HOUR"],
-                                "volume_24h": raw_data["VOLUME24HOUR"],
-                                "high_24h": raw_data["HIGH24HOUR"],
-                                "low_24h": raw_data["LOW24HOUR"],
-                                "market_cap": raw_data["MKTCAP"]
-                            }
-                            market_data["cryptos"].append(crypto_data)
-                            
-                        except KeyError as e:
-                            logger.warning(f"Missing data for a cryptocurrency: {e}")
-                            continue
-                        except Exception as e:
-                            logger.warning(f"Error processing cryptocurrency data: {e}")
-                            continue
-                    
-                    # 計算比特幣主導率
-                    if market_data["totalMarketCap"] > 0:
-                        market_data["btcDominance"] = (btc_market_cap / market_data["totalMarketCap"]) * 100
-                    
-                    # 保存到 JSON 文件
-                    try:
-                        with open('prices.json', 'w', encoding='utf-8') as f:
-                            json.dump(market_data["cryptos"], f, ensure_ascii=False, indent=4)
-                        logger.info("Successfully saved prices to prices.json")
-                        return market_data
-                    except Exception as e:
-                        logger.error(f"Error saving to JSON file: {e}")
-                        raise
-                    
+                    market_data["cryptos"].append(btc_data)
+                    break
                 else:
-                    logger.error(f"API request failed with status code: {response.status_code}")
-                    logger.error(f"Response content: {response.text}")
-                    
+                    logger.error(f"Bitcoin API request failed with status code: {btc_response.status_code}")
                     if attempt < max_retries - 1:
                         time.sleep(retry_delay)
                         continue
                     else:
-                        raise Exception(f"API request failed after {max_retries} attempts")
+                        raise Exception(f"Bitcoin API request failed after {max_retries} attempts")
                     
             except requests.exceptions.RequestException as e:
-                logger.error(f"Network error: {e}")
+                logger.error(f"Network error while fetching Bitcoin price: {e}")
                 if attempt < max_retries - 1:
                     time.sleep(retry_delay)
                     continue
                 else:
                     raise
+        
+        # 獲取以太坊價格
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Fetching Ethereum price (attempt {attempt + 1}/{max_retries})...")
+                eth_response = requests.get(eth_url, headers=headers, timeout=10)
+                
+                if eth_response.status_code == 200:
+                    eth_data = eth_response.json()
+                    eth_price = float(eth_data["bpi"]["USD"]["rate"].replace(",", ""))
+                    
+                    # 添加以太坊數據
+                    eth_data = {
+                        "symbol": "ETH",
+                        "name": "Ethereum",
+                        "price": eth_price,
+                        "change_24h": 0,  # CoinDesk API 不提供24小時變化
+                        "volume_24h": 0,  # CoinDesk API 不提供交易量
+                        "high_24h": eth_price,  # 使用當前價格作為高點
+                        "low_24h": eth_price,   # 使用當前價格作為低點
+                        "market_cap": 0  # CoinDesk API 不提供市值
+                    }
+                    market_data["cryptos"].append(eth_data)
+                    break
+                else:
+                    logger.error(f"Ethereum API request failed with status code: {eth_response.status_code}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        raise Exception(f"Ethereum API request failed after {max_retries} attempts")
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Network error while fetching Ethereum price: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise
+        
+        # 保存到 JSON 文件
+        try:
+            with open('prices.json', 'w', encoding='utf-8') as f:
+                json.dump(market_data["cryptos"], f, ensure_ascii=False, indent=4)
+            logger.info("Successfully saved prices to prices.json")
+            return market_data
+        except Exception as e:
+            logger.error(f"Error saving to JSON file: {e}")
+            raise
                 
     except Exception as e:
         logger.error(f"Error fetching prices: {e}")
